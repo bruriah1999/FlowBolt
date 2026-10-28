@@ -214,3 +214,50 @@ class TestSearch:
     async def test_display_name_for_cube(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(ds_logic.data_source_client, "get_cube", AsyncMock(return_value=_cube()))
         assert await ds_logic.get_display_name("cube:PhoneLookup") == "Phone Lookup"
+
+
+class TestListCubes:
+    async def test_lists_configured_cubes_with_schema(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ds_logic.settings, "FLAPI_CUBE_NAMES", ["PhoneLookup", "Other"])
+
+        async def get_cube(name: str, **_: Any) -> flapi_models.CubeStructure:
+            return _cube(cubeName=name, cubeDisplayName=f"{name} cube")
+
+        async def get_params(_name: str, **kwargs: Any) -> list[flapi_models.CubeParameterInfo]:
+            return _param_infos("fl:phone") if kwargs.get("is_required") else []
+
+        monkeypatch.setattr(ds_logic.data_source_client, "get_cube", get_cube)
+        monkeypatch.setattr(ds_logic.data_source_client, "get_cube_parameters", get_params)
+
+        cubes = await ds_logic.list_cubes()
+
+        assert [(c.id, c.name) for c in cubes] == [
+            ("cube:PhoneLookup", "PhoneLookup cube"),
+            ("cube:Other", "Other cube"),
+        ]
+        assert [f.name for f in cubes[0].fields] == ["phone", "activeSince", "isActive"]
+        assert {p.name for p in cubes[0].params.parameters if p.is_required} == {"fl:phone"}
+
+    async def test_skips_missing_cube(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ds_logic.settings, "FLAPI_CUBE_NAMES", ["Gone", "PhoneLookup"])
+
+        async def get_cube(name: str, **_: Any) -> flapi_models.CubeStructure:
+            if name == "Gone":
+                raise ds_logic.FlapiUpstreamError("not found", status_code=404)
+            return _cube()
+
+        monkeypatch.setattr(ds_logic.data_source_client, "get_cube", get_cube)
+        monkeypatch.setattr(ds_logic.data_source_client, "get_cube_parameters", AsyncMock(return_value=[]))
+
+        assert [c.cube_name for c in await ds_logic.list_cubes()] == ["PhoneLookup"]
+
+    async def test_auth_failure_is_raised(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(ds_logic.settings, "FLAPI_CUBE_NAMES", ["PhoneLookup"])
+        monkeypatch.setattr(
+            ds_logic.data_source_client,
+            "get_cube",
+            AsyncMock(side_effect=ds_logic.FlapiUpstreamError("denied", status_code=401)),
+        )
+
+        with pytest.raises(ds_logic.FlapiUpstreamError):
+            await ds_logic.list_cubes()

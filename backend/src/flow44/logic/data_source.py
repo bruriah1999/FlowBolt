@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from flow44.config import settings
 from flow44.integrations.flapi import (
     FlapiUpstreamError,
     QuickParams,
@@ -12,6 +13,7 @@ from flow44.integrations.flapi import (
 from flow44.integrations.flapi import models as flapi_models
 from flow44.integrations.flapi.models import QuickParamValue
 from flow44.logic.models import (
+    CubeSchema,
     DataSource,
     DataSourceFieldSchema,
     DataSourceParamsInfo,
@@ -39,6 +41,7 @@ __all__ = [
     "get_display_name",
     "get_params_info",
     "get_usage",
+    "list_cubes",
     "parse_data_source_id",
     "run_data_source",
     "search_data_sources",
@@ -316,6 +319,41 @@ async def search_data_sources(
         data_source_client.search(key, authorization=authorization),
     )
     return cubes + [_to_data_source(r) for r in packages]
+
+
+async def list_cubes(*, authorization: str | None = None) -> list[CubeSchema]:
+    """Every configured cube with its fields and parameters.
+
+    FLAPI can't list cubes, so the names come from FLAPI_CUBE_NAMES. A cube
+    that is missing or malformed is skipped; an auth failure is raised.
+    """
+
+    async def describe(name: str) -> CubeSchema:
+        cube = await data_source_client.get_cube(name, authorization=authorization)
+        params = await _cube_params_info(cube, authorization=authorization)
+        query = _cube_to_query(cube)
+        return CubeSchema(
+            id=cube_data_source_id(cube.cube_name),
+            cube_name=cube.cube_name,
+            name=query.display_name,
+            description=cube.cube_description or None,
+            fields=query.fields,
+            params=params,
+        )
+
+    names = settings.FLAPI_CUBE_NAMES
+    results = await asyncio.gather(*(describe(n) for n in names), return_exceptions=True)
+    cubes: list[CubeSchema] = []
+    for name, result in zip(names, results, strict=True):
+        if isinstance(result, CubeSchema):
+            cubes.append(result)
+        elif isinstance(result, FlapiUpstreamError) and result.status_code == 401:
+            raise result
+        elif isinstance(result, FlapiUpstreamError | ValidationError):
+            logger.warning("Skipping cube %r: %s", name, result)
+        else:
+            raise result
+    return cubes
 
 
 async def get_params_info(

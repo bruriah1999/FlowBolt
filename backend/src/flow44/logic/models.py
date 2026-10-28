@@ -104,6 +104,17 @@ class DataSourceQuerySchema(BaseModel):
     fields: list[DataSourceFieldSchema]
 
 
+class CubeSchema(BaseModel):
+    """A cube with everything needed to call it: output fields and parameters."""
+
+    id: str  # "cube:<cubeName>", usable wherever a data source id is
+    cube_name: str
+    name: str
+    description: str | None = None
+    fields: list[DataSourceFieldSchema]
+    params: DataSourceParamsInfo
+
+
 class CanRunResponse(BaseModel):
     can_run: bool
 

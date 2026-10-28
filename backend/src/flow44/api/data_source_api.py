@@ -8,6 +8,7 @@ from flow44.integrations.flapi.models import CubeId, QuickParams, QuickParamValu
 from flow44.logic import data_source as ds_logic
 from flow44.logic.models import (
     CanRunResponse,
+    CubeSchema,
     DataSource,
     DataSourceParamsInfo,
     DataSourceResult,
@@ -16,6 +17,17 @@ from flow44.logic.models import (
 from flow44.services.logging import log_bi_event
 
 router = APIRouter(prefix="/api/data-source", tags=["data-source"])
+cube_router = APIRouter(prefix="/cube/v1", tags=["cubes"])
+
+
+@cube_router.get("")
+async def list_cubes(authorization: AuthDep) -> list[CubeSchema]:
+    """All configured cubes (AIB_FLAPI_CUBE_NAMES) with their fields and parameters."""
+    try:
+        return await ds_logic.list_cubes(authorization=authorization)
+    except ds_logic.FlapiUpstreamError as err:
+        status = 401 if err.status_code == 401 else 502
+        raise HTTPException(status_code=status, detail=str(err)) from err
 
 
 @router.get("/search/{query_or_id}")

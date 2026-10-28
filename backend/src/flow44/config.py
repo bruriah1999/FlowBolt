@@ -101,6 +101,16 @@ class FlapiSettings(BuildAppSettings):
     FLAPI_BASE_URL: str = "http://localhost:6001"
     FLAPI_VERIFY_SSL: bool = True
     FLAPI_CLIENT_TIMEOUT_SEC: int = 25 * 60 + 10  # Flapi's default run timeout is 25 minutes
+    # Cubes listed by GET /api/data-source/cubes. FLAPI has no endpoint that
+    # lists every cube, so the names are configured. Defaults to the mock's.
+    FLAPI_CUBE_NAMES: list[str] = [
+        "Inventory",
+        "CityWeather",
+        "PhoneLookup",
+        "Xboard",
+        "TreeOfKnowledgeDynamic",
+        "TreeOfKnowledgeLayers",
+    ]
 
 
 class DirectorySettings(BuildAppSettings):
