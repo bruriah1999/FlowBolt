@@ -145,6 +145,13 @@ const run = async () => {
   assert(!!requiredWithDefaultBody?.results?.['Required Cube'] && Array.isArray(requiredWithDefaultBody.results['Required Cube']), 'Expected default results');
   console.log('✓ POST /package/v3/14 uses default value OK');
 
+  // Cube list (mock only)
+  const cubeList = await get('/cube/v1');
+  const cubeListBody = cubeList.body as Array<{ cubeName?: string; fields?: unknown[] }>;
+  assert(cubeList.status === 200 && Array.isArray(cubeListBody) && cubeListBody.length === 6, 'cube list must return all 6 cubes');
+  assert(cubeListBody.every((c) => !!c.cubeName && Array.isArray(c.fields)), 'each listed cube must carry its structure');
+  console.log('✓ GET /cube/v1 lists all cubes OK');
+
   // Cube structure
   const cube = await get('/cube/v1/PhoneLookup');
   assert(cube.status === 200, `GET cube expected 200, got ${cube.status}`);

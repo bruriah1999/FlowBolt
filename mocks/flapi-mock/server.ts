@@ -341,6 +341,23 @@ server.post('/package/:packageId', { schema: runPackageSchema }, runPackageHandl
 
 // ——— FLAPI Cubes ———
 
+// Mock-only convenience: real FLAPI has no endpoint listing every cube.
+server.get(
+  '/cube/v1',
+  {
+    schema: {
+      tags: ['Cubes'],
+      description: 'List all cubes with their structure (fields, parameters, dynamicParameters). Mock only.',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: Type.Array(CubeStructureSchema),
+        401: ErrorBodySchema,
+      },
+    },
+  },
+  async () => Array.from(cubeByName.values()).map((cube) => cube.structure),
+);
+
 const cubeNameParams = Type.Object({
   cubeName: Type.String({ description: 'Cube name' }),
 });
