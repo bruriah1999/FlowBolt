@@ -180,6 +180,16 @@ const run = async () => {
   assert(phoneMissing.status === 400, `POST cube without required param expected 400, got ${phoneMissing.status}`);
   console.log('✓ POST /cube/v1/:cubeName rejects missing required param OK');
 
+  // Example cubes (named after the FLAPI Swagger examples) run without input
+  for (const name of ['Xboard', 'TreeOfKnowledgeDynamic', 'TreeOfKnowledgeLayers']) {
+    const run = await post(`/cube/v1/${name}`, { cubeName: name });
+    assert(run.status === 200 && Array.isArray(run.body) && run.body.length > 0, `${name} must run without params`);
+  }
+  const blocked = await post('/cube/v1/Xboard', { cubeName: 'Xboard', status: ['todo'], priority: 'high' });
+  const blockedRows = blocked.body as Array<{ itemId?: string }>;
+  assert(blocked.status === 200 && blockedRows.length === 2, `Xboard filter expected 2 rows, got ${blockedRows.length}`);
+  console.log('✓ Example cubes run and filter OK');
+
   console.log('\n✅ All mock tests passed.');
 };
 

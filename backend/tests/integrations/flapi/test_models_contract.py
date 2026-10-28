@@ -57,7 +57,14 @@ def test_metadata_parses(package_id: int) -> None:
     assert meta.id_ == package_id
 
 
-CUBE_NAMES = ["Inventory", "CityWeather", "PhoneLookup"]
+CUBE_NAMES = [
+    "Inventory",
+    "CityWeather",
+    "PhoneLookup",
+    "Xboard",
+    "TreeOfKnowledgeDynamic",
+    "TreeOfKnowledgeLayers",
+]
 
 
 @pytest.mark.parametrize("cube_name", CUBE_NAMES)
