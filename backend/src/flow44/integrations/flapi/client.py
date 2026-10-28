@@ -6,6 +6,9 @@ import httpx
 
 from flow44.config import settings
 from flow44.integrations.flapi.models import (
+    CubeParameterInfo,
+    CubeRunResult,
+    CubeStructure,
     DataSourceRunResult,
     PackageMetadata,
     PackageSearchResult,
@@ -126,6 +129,48 @@ class FlapiClient:
         safe = quote(str(data_source_id), safe="")
         raw: dict[str, Any] = await self._request("GET", f"/package/v2/{safe}", authorization=authorization)
         return PackageMetadata.model_validate(raw)
+
+    # -- Cubes (addressed by name) --
+
+    async def get_cube(self, cube_name: str, *, authorization: str | None = None) -> CubeStructure:
+        safe = quote(cube_name, safe="")
+        raw: dict[str, Any] = await self._request("GET", f"/cube/v1/{safe}", authorization=authorization)
+        return CubeStructure.model_validate(raw)
+
+    async def get_cube_parameters(
+        self,
+        cube_name: str,
+        *,
+        authorization: str | None = None,
+        is_required: bool | None = None,
+        is_visible: bool | None = None,
+    ) -> list[CubeParameterInfo]:
+        query: dict[str, str] = {}
+        if is_required is not None:
+            query["isRequired"] = "true" if is_required else "false"
+        if is_visible is not None:
+            query["isVisible"] = "true" if is_visible else "false"
+        safe = quote(cube_name, safe="")
+        raw: list[dict[str, Any]] = await self._request(
+            "GET", f"/cube/v1/{safe}/parameters", authorization=authorization, params=query
+        )
+        return [CubeParameterInfo.model_validate(item) for item in raw]
+
+    async def run_cube(
+        self,
+        cube_name: str,
+        *,
+        authorization: str | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> CubeRunResult:
+        # Body is a flat JSON of parameter key -> value; FLAPI also wants the
+        # cube name in it. Its exact shape is per cube supplier.
+        safe = quote(cube_name, safe="")
+        body = {"cubeName": cube_name, **(params or {})}
+        raw: list[dict[str, Any]] = await self._request(
+            "POST", f"/cube/v1/{safe}", authorization=authorization, body=body
+        )
+        return CubeRunResult.model_validate(raw)
 
 
 # Module-level singleton — reuses TCP connections across requests.

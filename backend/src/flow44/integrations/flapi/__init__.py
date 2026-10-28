@@ -5,6 +5,9 @@ from flow44.integrations.flapi.client import (
 )
 from flow44.integrations.flapi.models import (
     CubeId,
+    CubeParameterInfo,
+    CubeRunResult,
+    CubeStructure,
     DataSourceRunResult,
     PackageMetadata,
     PackageSearchResult,
@@ -14,6 +17,9 @@ from flow44.integrations.flapi.models import (
 
 __all__ = [
     "CubeId",
+    "CubeParameterInfo",
+    "CubeRunResult",
+    "CubeStructure",
     "DataSourceRunResult",
     "FlapiClient",
     "FlapiUpstreamError",

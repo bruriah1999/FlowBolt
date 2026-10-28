@@ -212,7 +212,7 @@ async def chat_ws(  # noqa: C901, PLR0915
                 if msg_type == "message":
                     user_content: str = data["content"]
                     selected_model: str | None = data.get("model")
-                    ds_ids: list[int] = data.get("dataSourceIds") or []
+                    ds_ids: list[int | str] = data.get("dataSourceIds") or []
 
                     user_event: dict[str, Any] = {"type": "user_message", "content": user_content}
                     if ds_ids:

@@ -137,6 +137,7 @@ export function DataSourceSelector({ isOpen }: DataSourceSelectorProps) {
                 >
                   <div className="text-[13px] font-medium mb-0.5">
                     {dataSource.name}
+                    {dataSource.type === 'cube' && <span className="text-muted-foreground font-normal"> · cube</span>}
                     {alreadySelected && <span className="text-muted-foreground font-normal"> (selected)</span>}
                   </div>
                   {isShowingSuggestions ? (

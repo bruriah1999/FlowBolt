@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Message, Action, WSMessage, AIModel, AgentPhase, PlanOverview, ExecutionTask, ProjectSummary, FixStep, FollowUpStep, FileDiff } from '../types';
+import type { Message, Action, WSMessage, AIModel, AgentPhase, PlanOverview, ExecutionTask, ProjectSummary, FixStep, FollowUpStep, FileDiff, DataSourceId } from '../types';
 import { WRITE_ROLES } from '../types';
 import { getChatSocket } from '../services/websocket';
 import { useSessionStore } from './session';
@@ -26,7 +26,7 @@ export interface ChatState {
   fileDiffs: FileDiff[];
   designProgress: { architecture: string | null; ux: string | null };
   projectSummary: ProjectSummary | null;
-  selectedDataSources: { id: number; name: string }[];
+  selectedDataSources: { id: DataSourceId; name: string }[];
   /** True after the project has completed at least one AI action cycle. */
   buildCompleted: boolean;
   /** Server-reported agent activity from GET /api/iaagent/{id}/alive */
@@ -45,8 +45,8 @@ export interface ChatState {
   clearError: () => void;
   setStreaming: (streaming: boolean) => void;
   setSelectedModel: (model: string) => void;
-  addDataSource: (pkg: { id: number; name: string }) => void;
-  removeDataSource: (id: number) => void;
+  addDataSource: (pkg: { id: DataSourceId; name: string }) => void;
+  removeDataSource: (id: DataSourceId) => void;
   clearDataSources: () => void;
   loadModels: () => Promise<void>;
 }
@@ -327,14 +327,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
-  addDataSource(pkg: { id: number; name: string }) {
+  addDataSource(pkg: { id: DataSourceId; name: string }) {
     set((state) => {
       if (state.selectedDataSources.some((c) => c.id === pkg.id)) return state;
       return { selectedDataSources: [...state.selectedDataSources, pkg] };
     });
   },
 
-  removeDataSource(id: number) {
+  removeDataSource(id: DataSourceId) {
     set((state) => ({ selectedDataSources: state.selectedDataSources.filter((c) => c.id !== id) }));
   },
 

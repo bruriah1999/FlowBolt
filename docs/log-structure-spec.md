@@ -177,7 +177,7 @@ Trigger: the user adds a data source to the project.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `data_source_type` | string | Yes | Type of data source, for now it is only `package`. |
+| `data_source_type` | string | Yes | Type of data source, `flow_package` or `flow_cube`. |
 | `data_source_id` | string | Yes | ID of the underlying data source. |
 
 #### `data_source_removed` || Not yet implemented (no way to manually remove a data source)
@@ -186,7 +186,7 @@ Trigger: the user removes a data source from the project.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `data_source_id` | string | Yes | ID of the data source. |
-| `data_source_type` | string | Yes | Type of data source, for now it is only `package`. |
+| `data_source_type` | string | Yes | Type of data source, `flow_package` or `flow_cube`. |
 
 #### `flapi_call_made`
 Trigger: the running app calls flapi.

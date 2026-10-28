@@ -4,7 +4,7 @@ export interface Message {
   content: string;
   actions?: Action[];
   timestamp: number;
-  dataSources?: { id: number; name: string }[];
+  dataSources?: { id: DataSourceId; name: string }[];
   agentCard?: AgentCard;
   version?: string; // commit_sha
 }
@@ -127,10 +127,14 @@ export interface AIModel {
   provider: string;
 }
 
+// Packages have numeric ids; cubes are "cube:<cubeName>".
+export type DataSourceId = number | string;
+
 export interface DataSourceSearchResult {
-  id: number;
+  id: DataSourceId;
   name: string;
   description?: string | null;
+  type?: 'package' | 'cube';
 }
 
 export interface AdUser {
@@ -215,7 +219,7 @@ export interface FollowUpStep {
 }
 
 export type WSMessage = { _ts?: string } & (
-  | { type: 'message'; content: string; model?: string; dataSourceIds?: number[] }
+  | { type: 'message'; content: string; model?: string; dataSourceIds?: DataSourceId[] }
   | { type: 'text'; content: string }
   | { type: 'file'; path: string; content: string }
   | { type: 'shell_output'; command: string; output: string }
@@ -235,7 +239,7 @@ export type WSMessage = { _ts?: string } & (
 
   | { type: 'followup_step'; tool: string; args: Record<string, string>; status: string; result_preview?: string; iteration: number }
   | { type: 'file_diffs'; diffs: FileDiff[] }
-  | { type: 'user_message'; content: string; data_sources?: { id: number; name: string }[]; error_fix_request?: { errorMessage: string; errorFile?: string; errorLine?: number; errorStack?: string } }
+  | { type: 'user_message'; content: string; data_sources?: { id: DataSourceId; name: string }[]; error_fix_request?: { errorMessage: string; errorFile?: string; errorLine?: number; errorStack?: string } }
   | { type: 'plan_accepted'; overview: PlanOverview }
   | { type: 'version_committed'; commit_sha: string; author?: VersionAuthor; diffs?: FileDiff[] }
   | { type: 'version_preview_active'; commit_sha: string; is_latest: boolean }

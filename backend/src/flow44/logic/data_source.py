@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
@@ -34,12 +35,43 @@ __all__ = [
     "DataSourceUsage",
     "FlapiUpstreamError",
     "can_run_without_params",
+    "cube_data_source_id",
     "get_display_name",
     "get_params_info",
     "get_usage",
+    "parse_data_source_id",
     "run_data_source",
     "search_data_sources",
+    "storage_type",
 ]
+
+
+# -- Data source ids -----------------------------------------------------
+
+# Packages are addressed by numeric id, cubes by name. A cube's data source
+# id carries a prefix so the bare id string still says which FLAPI API to
+# call — it travels unchanged through the chat, agents, DB rows and the
+# generated `/api/data-source/{id}/run` calls.
+CUBE_ID_PREFIX = "cube:"
+
+type DataSourceKind = Literal["package", "cube"]
+
+
+def cube_data_source_id(cube_name: str) -> str:
+    return f"{CUBE_ID_PREFIX}{cube_name}"
+
+
+def parse_data_source_id(data_source_id: str | int) -> tuple[DataSourceKind, str]:
+    raw = str(data_source_id).strip()
+    if raw.startswith(CUBE_ID_PREFIX):
+        return "cube", raw.removeprefix(CUBE_ID_PREFIX)
+    return "package", raw
+
+
+def storage_type(data_source_id: str | int) -> str:
+    """The `type` column value for a data source in `project_data_sources`."""
+    kind, _ = parse_data_source_id(data_source_id)
+    return "flow_cube" if kind == "cube" else "flow_package"
 
 
 # -- FLAPI -> domain conversions -----------------------------------------
@@ -138,6 +170,136 @@ def _to_result(raw: flapi_models.DataSourceRunResult) -> DataSourceResult:
     return DataSourceResult(data=raw.results)
 
 
+# Cube parameters carry an ontology instead of a type. Anything not listed
+# is free text.
+_CUBE_ONTOLOGY_PARAM_TYPE: dict[str, ParamType] = {
+    "TIMESTAMP": "datetime",
+    "TIME": "datetime",
+    "LOCATION": "geographic",
+    "GEOMETRY": "geographic",
+}
+
+
+def _cube_display_name(cube: flapi_models.CubeStructure) -> str:
+    return (cube.cube_display_name or "").strip() or cube.cube_name
+
+
+def _cube_to_data_source(cube: flapi_models.CubeStructure) -> DataSource:
+    return DataSource(
+        id=cube_data_source_id(cube.cube_name),
+        name=_cube_display_name(cube),
+        description=cube.cube_description or None,
+        type="cube",
+    )
+
+
+def _cube_to_params_info(
+    cube: flapi_models.CubeStructure,
+    *,
+    required_keys: set[str],
+    visible_keys: set[str],
+) -> DataSourceParamsInfo:
+    # An empty visible set means FLAPI told us nothing about visibility, not
+    # that every parameter is hidden. Required params are always shown.
+    def shown(key: str) -> bool:
+        return not visible_keys or key in visible_keys or key in required_keys
+
+    parameters = [
+        ParamDefinition(
+            name=p.key,
+            display_name=p.display_name,
+            type=_CUBE_ONTOLOGY_PARAM_TYPE.get((p.ontology or "").upper(), "string"),
+            is_required=p.key in required_keys,
+            is_single_value=False,
+            cube_id=cube.cube_name,
+        )
+        for p in cube.parameters
+        if shown(p.key)
+    ]
+    parameters += [
+        ParamDefinition(
+            name=key,
+            display_name=p.key_display_name,
+            type="string",
+            is_required=key in required_keys,
+            is_single_value=p.is_single_value,
+            options=[ParamOption(name=label, value=value) for value, label in p.values_display_name.items()],
+            cube_id=cube.cube_name,
+        )
+        for key, p in cube.dynamic_parameters.items()
+        if shown(key)
+    ]
+    return DataSourceParamsInfo(parameters=parameters, require_any=False)
+
+
+def _cube_to_query(cube: flapi_models.CubeStructure) -> DataSourceQuerySchema:
+    # The run result is wrapped under the query's display name (see
+    # _run_cube), which is the key the generated Results type reads.
+    return DataSourceQuerySchema(
+        name=cube.cube_name,
+        display_name=_cube_display_name(cube),
+        description=cube.cube_description or "",
+        fields=[
+            DataSourceFieldSchema(
+                name=field.key,
+                display_name=field.header,
+                type=_to_domain_field_type(field.data_type.lower()),
+            )
+            for field in cube.fields
+        ],
+    )
+
+
+async def _cube_params_info(
+    cube: flapi_models.CubeStructure,
+    *,
+    authorization: str | None,
+) -> DataSourceParamsInfo:
+    required, visible = await asyncio.gather(
+        data_source_client.get_cube_parameters(cube.cube_name, authorization=authorization, is_required=True),
+        data_source_client.get_cube_parameters(cube.cube_name, authorization=authorization, is_visible=True),
+    )
+    return _cube_to_params_info(
+        cube,
+        required_keys={p.key for p in required},
+        visible_keys={p.key for p in visible},
+    )
+
+
+async def _run_cube(
+    cube_name: str,
+    *,
+    authorization: str | None,
+    params: QuickParams | None,
+) -> DataSourceResult:
+    # Callers send the package-shaped {cubeId: {key: value}}; a cube takes
+    # a flat {key: value}.
+    flat: dict[str, Any] = {}
+    for cube_params in (params.root if params else {}).values():
+        flat.update(cube_params)
+    cube, rows = await asyncio.gather(
+        data_source_client.get_cube(cube_name, authorization=authorization),
+        data_source_client.run_cube(cube_name, authorization=authorization, params=flat),
+    )
+    return DataSourceResult(data={_cube_display_name(cube): rows.root})
+
+
+async def _search_cube(name: str, *, authorization: str | None) -> list[DataSource]:
+    # FLAPI has no cube search; an exact-name lookup is the best we can do.
+    if not name:
+        return []
+    try:
+        cube = await data_source_client.get_cube(name, authorization=authorization)
+    except FlapiUpstreamError as err:
+        if err.status_code != 404:
+            logger.warning("Cube lookup for %r failed: %s", name, err)
+        return []
+    except ValidationError as err:
+        logger.warning("Cube %r returned an unexpected structure: %s", name, err)
+        return []
+    return [_cube_to_data_source(cube)]
+
+
 # -- Public API ----------------------------------------------------------
 
 
@@ -146,8 +308,14 @@ async def search_data_sources(
     *,
     authorization: str | None = None,
 ) -> list[DataSource]:
-    results = await data_source_client.search(query_or_id, authorization=authorization)
-    return [_to_data_source(r) for r in results]
+    kind, key = parse_data_source_id(query_or_id)
+    if kind == "cube":
+        return await _search_cube(key, authorization=authorization)
+    cubes, packages = await asyncio.gather(
+        _search_cube(key, authorization=authorization),
+        data_source_client.search(key, authorization=authorization),
+    )
+    return cubes + [_to_data_source(r) for r in packages]
 
 
 async def get_params_info(
@@ -155,7 +323,11 @@ async def get_params_info(
     *,
     authorization: str | None = None,
 ) -> DataSourceParamsInfo:
-    info = await data_source_client.get_quick_params_info(data_source_id, authorization=authorization)
+    kind, key = parse_data_source_id(data_source_id)
+    if kind == "cube":
+        cube = await data_source_client.get_cube(key, authorization=authorization)
+        return await _cube_params_info(cube, authorization=authorization)
+    info = await data_source_client.get_quick_params_info(key, authorization=authorization)
     return _to_params_info(info)
 
 
@@ -166,8 +338,11 @@ async def run_data_source(
     authorization: str | None = None,
     params: QuickParams | None = None,
 ) -> DataSourceResult:
+    kind, key = parse_data_source_id(data_source_id)
+    if kind == "cube":
+        return await _run_cube(key, authorization=authorization, params=params)
     raw = await data_source_client.run_data_source(
-        data_source_id,
+        key,
         authorization=authorization,
         quick_params=params,
         all_queries=True,
@@ -181,7 +356,11 @@ async def get_display_name(
     *,
     authorization: str | None = None,
 ) -> str:
-    results = await search_data_sources(data_source_id, authorization=authorization)
+    kind, key = parse_data_source_id(data_source_id)
+    if kind == "cube":
+        results = await _search_cube(key, authorization=authorization)
+    else:
+        results = [_to_data_source(r) for r in await data_source_client.search(key, authorization=authorization)]
     if not results:
         raise LookupError(f"Data source {data_source_id} not found")
     name = results[0].name.strip()
@@ -252,6 +431,21 @@ async def get_usage(
     *,
     authorization: str | None = None,
 ) -> DataSourceUsage:
+    kind, key = parse_data_source_id(data_source_id)
+    if kind == "cube":
+        cube = await data_source_client.get_cube(key, authorization=authorization)
+        queries = [_cube_to_query(cube)]
+        params_info = await _cube_params_info(cube, authorization=authorization)
+    else:
+        queries, params_info = await _package_usage_schema(key, authorization=authorization)
+    return await _usage_with_sample(data_source_id, queries, params_info, authorization=authorization)
+
+
+async def _package_usage_schema(
+    data_source_id: str,
+    *,
+    authorization: str | None,
+) -> tuple[list[DataSourceQuerySchema], DataSourceParamsInfo]:
     metadata, params_info = await asyncio.gather(
         data_source_client.get_metadata(data_source_id, authorization=authorization),
         get_params_info(data_source_id, authorization=authorization),
@@ -284,6 +478,16 @@ async def get_usage(
         )
         for query in metadata.queries
     ]
+    return queries, params_info
+
+
+async def _usage_with_sample(
+    data_source_id: str | int,
+    queries: list[DataSourceQuerySchema],
+    params_info: DataSourceParamsInfo,
+    *,
+    authorization: str | None,
+) -> DataSourceUsage:
     minimal = _minimal_params_for(params_info)
     can_run = minimal is not None
 

@@ -145,6 +145,41 @@ const run = async () => {
   assert(!!requiredWithDefaultBody?.results?.['Required Cube'] && Array.isArray(requiredWithDefaultBody.results['Required Cube']), 'Expected default results');
   console.log('✓ POST /package/v3/14 uses default value OK');
 
+  // Cube structure
+  const cube = await get('/cube/v1/PhoneLookup');
+  assert(cube.status === 200, `GET cube expected 200, got ${cube.status}`);
+  const cubeBody = cube.body as { cubeName?: string; fields?: unknown[]; parameters?: unknown[] };
+  assert(cubeBody.cubeName === 'PhoneLookup', 'cube structure must echo cubeName');
+  assert(Array.isArray(cubeBody.fields) && cubeBody.fields.length > 0, 'cube structure must have fields');
+  assert(Array.isArray(cubeBody.parameters) && cubeBody.parameters.length > 1, 'cube structure must have parameters');
+  console.log('✓ GET /cube/v1/:cubeName OK');
+
+  const unknownCube = await get('/cube/v1/NoSuchCube');
+  assert(unknownCube.status === 404, `GET unknown cube expected 404, got ${unknownCube.status}`);
+  console.log('✓ GET /cube/v1/:cubeName 404 for unknown cube OK');
+
+  // Cube parameters — required filter
+  const required = await get('/cube/v1/PhoneLookup/parameters?isRequired=true');
+  assert(required.status === 200, `GET cube parameters expected 200, got ${required.status}`);
+  const requiredKeys = (required.body as Array<{ key: string }>).map((p) => p.key);
+  assert(requiredKeys.length === 1 && requiredKeys[0] === 'fl:phone', `Expected only fl:phone required, got ${requiredKeys}`);
+  console.log('✓ GET /cube/v1/:cubeName/parameters?isRequired=true OK');
+
+  // Cube run — rows are a flat list
+  const inventoryRun = await post('/cube/v1/Inventory', { cubeName: 'Inventory' });
+  assert(inventoryRun.status === 200, `POST cube run expected 200, got ${inventoryRun.status}`);
+  assert(Array.isArray(inventoryRun.body) && inventoryRun.body.length === 5, 'cube run must return all rows');
+  console.log('✓ POST /cube/v1/:cubeName OK');
+
+  const phoneRun = await post('/cube/v1/PhoneLookup', { cubeName: 'PhoneLookup', 'fl:phone': '0527654321' });
+  const phoneRows = phoneRun.body as Array<{ owner?: string }>;
+  assert(phoneRun.status === 200 && phoneRows.length === 1 && phoneRows[0].owner === 'Amir Cohen', 'cube run must filter by param');
+  console.log('✓ POST /cube/v1/:cubeName filters by parameter OK');
+
+  const phoneMissing = await post('/cube/v1/PhoneLookup', { cubeName: 'PhoneLookup' });
+  assert(phoneMissing.status === 400, `POST cube without required param expected 400, got ${phoneMissing.status}`);
+  console.log('✓ POST /cube/v1/:cubeName rejects missing required param OK');
+
   console.log('\n✅ All mock tests passed.');
 };
 

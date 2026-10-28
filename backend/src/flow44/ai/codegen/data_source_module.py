@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from typing import assert_never
+from urllib.parse import quote
 
 from flow44.ai.codegen.ts_types import _redundant_display_name, generate_ts_interfaces
 from flow44.logic.models import DataSourceParamsInfo, DataSourceQuerySchema, ParamDefinition
@@ -155,7 +156,7 @@ def _build_body(
     queries: list[DataSourceQuerySchema] | None = None,
 ) -> str:
     lines: list[str] = []
-    path = f"/api/data-source/{data_source_id}/run"
+    path = f"/api/data-source/{quote(data_source_id, safe=':')}/run"
 
     if not required and not optional:
         lines.append(f"  const res = await fetchDataSource('{path}');\n")

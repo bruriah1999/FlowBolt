@@ -6,6 +6,9 @@ import httpx
 import pytest
 
 from flow44.integrations.flapi.models import (
+    CubeParameterInfo,
+    CubeRunResult,
+    CubeStructure,
     PackageMetadata,
     PackageSearchResult,
     QuickParamsInfo,
@@ -52,3 +55,28 @@ def test_metadata_parses(package_id: int) -> None:
     r.raise_for_status()
     meta = PackageMetadata.model_validate(r.json())
     assert meta.id_ == package_id
+
+
+CUBE_NAMES = ["Inventory", "CityWeather", "PhoneLookup"]
+
+
+@pytest.mark.parametrize("cube_name", CUBE_NAMES)
+def test_cube_structure_parses(cube_name: str) -> None:
+    r = httpx.get(f"{MOCK_BASE_URL}/cube/v1/{cube_name}", headers=AUTH)
+    r.raise_for_status()
+    cube = CubeStructure.model_validate(r.json())
+    assert cube.cube_name == cube_name
+    assert cube.fields
+
+
+@pytest.mark.parametrize("cube_name", CUBE_NAMES)
+def test_cube_parameters_parse(cube_name: str) -> None:
+    r = httpx.get(f"{MOCK_BASE_URL}/cube/v1/{cube_name}/parameters", headers=AUTH)
+    r.raise_for_status()
+    [CubeParameterInfo.model_validate(x) for x in r.json()]
+
+
+def test_cube_run_parses() -> None:
+    r = httpx.post(f"{MOCK_BASE_URL}/cube/v1/Inventory", headers=AUTH, json={"cubeName": "Inventory"})
+    r.raise_for_status()
+    assert CubeRunResult.model_validate(r.json()).root

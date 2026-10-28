@@ -37,7 +37,7 @@ async def fetch_and_analyze_data_source(
         ds_logic.get_display_name(data_source_id, authorization=authorization),
         ds_logic.get_usage(data_source_id, authorization=authorization),
     )
-    sanitized = sanitize_to_pascal_case(ds_name) or f"DataSource{data_source_id}"
+    sanitized = sanitize_to_pascal_case(ds_name) or sanitize_to_pascal_case(f"DataSource {data_source_id}")
     prompt = render_data_source_analysis(
         user_content=user_content,
         data_source_name=ds_name,
@@ -66,6 +66,7 @@ async def fetch_and_analyze_data_source(
             ),
         }
     return DataSourceContext(
+        type=ds_logic.storage_type(data_source_id),
         data_source_id=data_source_id,
         data_source_name=ds_name,
         sanitized_name=sanitized,

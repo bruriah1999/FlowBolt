@@ -758,3 +758,27 @@ class TestDatetimeFieldConversion:
         )
         assert "for (const row of" not in result
         assert "new Date(" not in result
+
+
+class TestCubeDataSource:
+    def test_cube_id_in_run_path_and_namespaced_param(self) -> None:
+        params = DataSourceParamsInfo(
+            parameters=[
+                ParamDefinition(
+                    name="fl:phone",
+                    display_name="Phone",
+                    type="string",
+                    is_required=True,
+                    is_single_value=False,
+                    cube_id="PhoneLookup",
+                )
+            ],
+        )
+        result = generate_data_source_module(
+            data_source_id="cube:Phone Lookup",
+            sanitized_name="PhoneLookup",
+            params_info=params,
+            queries=_queries("PhoneLookup"),
+        )
+        assert "'/api/data-source/cube:Phone%20Lookup/run'" in result
+        assert "body['PhoneLookup']['fl:phone'] = fl_phone;" in result

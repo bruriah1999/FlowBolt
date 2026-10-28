@@ -17,6 +17,8 @@ import {
   QuickParamDefinitionSchema,
   RunResultSchema,
   HealthSchema,
+  CubeStructureSchema,
+  CubeRunResultSchema,
   errorBody,
 } from './schemas';
 import {
@@ -25,6 +27,7 @@ import {
   getQuickParamsInfo,
   getPackageFullMetadata,
 } from './packages';
+import { cubeByName } from './cubes/index.js';
 
 const PORT = Number(process.env.MOCK_PORT) || 6001;
 
@@ -116,6 +119,7 @@ await server.register(swagger, {
       { name: 'Search', description: 'Package search endpoints' },
       { name: 'Run', description: 'Package execution endpoints' },
       { name: 'Metadata', description: 'Package metadata endpoints' },
+      { name: 'Cubes', description: 'Cube structure, parameters and execution' },
       { name: 'Health', description: 'Health check endpoints' },
     ],
   },
@@ -334,6 +338,106 @@ const runPackageHandler = async (request: any, reply: any) => {
 // Register run endpoint with both v3 and legacy routes
 server.post('/package/v3/:packageId', { schema: runPackageSchema }, runPackageHandler);
 server.post('/package/:packageId', { schema: runPackageSchema }, runPackageHandler);
+
+// ——— FLAPI Cubes ———
+
+const cubeNameParams = Type.Object({
+  cubeName: Type.String({ description: 'Cube name' }),
+});
+
+server.get(
+  '/cube/v1/:cubeName',
+  {
+    schema: {
+      tags: ['Cubes'],
+      description: 'Get cube structure',
+      security: [{ bearerAuth: [] }],
+      params: cubeNameParams,
+      querystring: Type.Object({ section: Type.Optional(Type.String()) }),
+      response: {
+        200: CubeStructureSchema,
+        401: ErrorBodySchema,
+        404: ErrorBodySchema,
+      },
+    },
+  },
+  async (request, reply) => {
+    const cube = cubeByName.get(request.params.cubeName);
+    if (!cube) {
+      return reply.status(404).send(errorBody('not_found', `cube not found: ${request.params.cubeName}`));
+    }
+    return cube.structure;
+  },
+);
+
+server.get(
+  '/cube/v1/:cubeName/parameters',
+  {
+    schema: {
+      tags: ['Cubes'],
+      description: 'Get cube parameters',
+      security: [{ bearerAuth: [] }],
+      params: cubeNameParams,
+      querystring: Type.Object({
+        isRequired: Type.Optional(Type.Boolean()),
+        isVisible: Type.Optional(Type.Boolean()),
+        section: Type.Optional(Type.String()),
+      }),
+      response: {
+        200: Type.Array(
+          Type.Object({
+            key: Type.String(),
+            displayName: Type.String(),
+            ontology: Type.Union([Type.String(), Type.Null()]),
+            isRequired: Type.Boolean(),
+            isVisible: Type.Boolean(),
+          }),
+        ),
+        401: ErrorBodySchema,
+        404: ErrorBodySchema,
+      },
+    },
+  },
+  async (request, reply) => {
+    const cube = cubeByName.get(request.params.cubeName);
+    if (!cube) {
+      return reply.status(404).send(errorBody('not_found', `cube not found: ${request.params.cubeName}`));
+    }
+    const { isRequired, isVisible } = request.query;
+    return cube.parameterInfo({ isRequired, isVisible });
+  },
+);
+
+server.post(
+  '/cube/v1/:cubeName',
+  {
+    schema: {
+      tags: ['Cubes'],
+      description: 'Execute a cube. Body is a flat JSON of parameter key -> value (plus cubeName).',
+      security: [{ bearerAuth: [] }],
+      params: cubeNameParams,
+      querystring: Type.Object({ returnErrorStack: Type.Optional(Type.Boolean()) }),
+      body: Type.Record(Type.String(), Type.Unknown()),
+      response: {
+        200: CubeRunResultSchema,
+        400: ErrorBodySchema,
+        401: ErrorBodySchema,
+        404: ErrorBodySchema,
+      },
+    },
+  },
+  async (request, reply) => {
+    const cube = cubeByName.get(request.params.cubeName);
+    if (!cube) {
+      return reply.status(404).send(errorBody('not_found', `cube not found: ${request.params.cubeName}`));
+    }
+    const result = cube.run(request.body ?? {});
+    if ('error' in result) {
+      return reply.status(400).send(errorBody('missing_required_params', result.error));
+    }
+    return result;
+  },
+);
 
 // ——— Health ———
 

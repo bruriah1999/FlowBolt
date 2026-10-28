@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
 import { FileText, TerminalSquare } from 'lucide-react';
-import type { Message } from '../../types';
+import type { DataSourceId, Message } from '../../types';
 import { formatClock } from '../../utils/formatTime';
 import { Badge } from '../ui/badge';
 import {
@@ -61,7 +61,7 @@ function AgentCardRenderer({ message }: { message: Message }) {
   }
 }
 
-function DataSourceBadges({ dataSources }: { dataSources: { id: number; name: string }[] }) {
+function DataSourceBadges({ dataSources }: { dataSources: { id: DataSourceId; name: string }[] }) {
   return (
     <div className="flex flex-wrap gap-1 mb-1.5">
       {dataSources.map((ds) => (

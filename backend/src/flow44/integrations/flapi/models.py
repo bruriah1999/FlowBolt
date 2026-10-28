@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator
-from pydantic.alias_generators import to_pascal
+from pydantic.alias_generators import to_camel, to_pascal
 
 # Wire vocabulary — authoritative per FLAPI. Quick-params types are
 # PascalCase; schema field types are lowercase with a few legacy tags.
@@ -204,3 +204,96 @@ class PackageMetadata(PascalCaseBaseModel):
     description: str | None = None
     # output_queries_id: list[Any]
     queries: list[Query]
+
+
+# -- Cubes: /cube/v1/{cubeName} -------------------------------------------
+#
+# Cubes are addressed by name and speak camelCase. Each cube's supplier can
+# add its own keys, so every model allows extras; only what we read is typed.
+
+
+class CamelCaseBaseModel(BaseModel):
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        extra="allow",
+    )
+
+
+class CubeSpan(BaseModel):
+    start: int = 0
+    end: int = 0
+
+
+class CubeValueItem(CamelCaseBaseModel):
+    value: str
+    raw_value: str
+    ontology: str
+    span: CubeSpan = Field(default_factory=CubeSpan)
+    optional_ontologies: list[Any] = Field(default_factory=list)
+    enrichments: list[Any] = Field(default_factory=list)
+    domains: list[Any] = Field(default_factory=list)
+
+
+class CubeParameter(CamelCaseBaseModel):
+    """A free-value parameter; its type is implied by `ontology`."""
+
+    key: str
+    display_name: str
+    ontology: str | None = None
+    value: list[CubeValueItem] | None = None
+
+
+class CubeDynamicParameter(CamelCaseBaseModel):
+    """A pick-from-options parameter; `values_display_name` maps value -> label."""
+
+    is_single_value: bool = False
+    key_display_name: str
+    values_display_name: dict[str, str] = Field(default_factory=dict)
+    value: list[str] | str | None = None
+
+
+class CubeField(CamelCaseBaseModel):
+    key: str
+    header: str
+    data_type: str
+    ontology_type: str | None = None
+
+
+class CubeTriangle(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    Id: int
+    Clearance: int
+
+
+# GET /cube/v1/{cubeName} — a.k.a. CubeExecutionPayload.
+class CubeStructure(CamelCaseBaseModel):
+    # `_id` would be a private attribute in pydantic; keep it under an alias.
+    mongo_id: str | None = Field(default=None, alias="_id")
+    created_time: dict[str, Any] | None = None
+    cube_name: str
+    cube_display_name: str | None = None
+    cube_description: str | None = None
+    cube_owner: str | None = None
+    cube_icon: str | None = None
+    cube_columns_api: list[str] | str | None = None
+    fields: list[CubeField] = Field(default_factory=list)
+    parameters: list[CubeParameter] = Field(default_factory=list)
+    dynamic_parameters: dict[str, CubeDynamicParameter] = Field(default_factory=dict)
+    static_parameters: dict[str, Any] | None = None
+    execution_parameters: dict[str, Any] | None = None
+    is_authorized: bool | None = None
+    triangles: list[CubeTriangle] | None = None
+
+
+# GET /cube/v1/{cubeName}/parameters — one entry per parameter.
+class CubeParameterInfo(CamelCaseBaseModel):
+    key: str
+    display_name: str | None = None
+    is_required: bool = False
+    is_visible: bool = True
+
+
+# POST /cube/v1/{cubeName} — one JSON object per table row.
+class CubeRunResult(RootModel[list[dict[str, Any]]]):
+    pass

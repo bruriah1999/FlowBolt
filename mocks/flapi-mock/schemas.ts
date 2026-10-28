@@ -138,6 +138,78 @@ export const RunResultSchema = Type.Object({
 
 export type RunResult = Static<typeof RunResultSchema>;
 
+// ——— Cubes ———
+// Mirrors CubeStructure in backend/src/flow44/integrations/flapi/models.py.
+// Real cubes carry many more (supplier-specific) keys; only the ones the
+// backend reads are declared, the rest pass through.
+
+export const CubeValueItemSchema = Type.Object({
+  value: Type.String(),
+  rawValue: Type.String(),
+  ontology: Type.String(),
+  span: Type.Object({ start: Type.Number(), end: Type.Number() }),
+});
+
+export const CubeParameterSchema = Type.Object(
+  {
+    key: Type.String(),
+    displayName: Type.String(),
+    ontology: Type.Union([Type.String(), Type.Null()]),
+    value: Type.Union([Type.Array(CubeValueItemSchema), Type.Null()]),
+  },
+  { additionalProperties: true },
+);
+
+export type CubeParameter = Static<typeof CubeParameterSchema>;
+
+export const CubeDynamicParameterSchema = Type.Object(
+  {
+    isSingleValue: Type.Boolean(),
+    keyDisplayName: Type.String(),
+    valuesDisplayName: Type.Record(Type.String(), Type.String()),
+    value: Type.Union([Type.Array(Type.String()), Type.String(), Type.Null()]),
+  },
+  { additionalProperties: true },
+);
+
+export type CubeDynamicParameter = Static<typeof CubeDynamicParameterSchema>;
+
+export const CubeFieldSchema = Type.Object(
+  {
+    key: Type.String(),
+    header: Type.String(),
+    dataType: Type.String(),
+    ontologyType: Type.String(),
+  },
+  { additionalProperties: true },
+);
+
+export type CubeField = Static<typeof CubeFieldSchema>;
+
+export const CubeStructureSchema = Type.Object(
+  {
+    _id: Type.String(),
+    createdTime: Type.Optional(Type.Record(Type.String(), Type.String())),
+    cubeName: Type.String(),
+    cubeDisplayName: Type.String(),
+    cubeDescription: Type.Union([Type.String(), Type.Null()]),
+    cubeOwner: Type.Union([Type.String(), Type.Null()]),
+    cubeIcon: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    fields: Type.Array(CubeFieldSchema),
+    parameters: Type.Array(CubeParameterSchema),
+    dynamicParameters: Type.Record(Type.String(), CubeDynamicParameterSchema),
+    staticParameters: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+    isAuthorized: Type.Boolean(),
+    triangles: Type.Optional(Type.Array(Type.Object({ Id: Type.Number(), Clearance: Type.Number() }))),
+  },
+  { additionalProperties: true },
+);
+
+export type CubeStructure = Static<typeof CubeStructureSchema>;
+
+// Run output: one JSON object per table row, keyed by fields[].key.
+export const CubeRunResultSchema = Type.Array(Type.Record(Type.String(), Type.Unknown()));
+
 // Health check
 export const HealthSchema = Type.Object({
   ok: Type.Boolean(),

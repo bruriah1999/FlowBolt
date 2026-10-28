@@ -14,9 +14,11 @@ type ParamValue = ParamScalar | list[ParamScalar]
 
 
 class DataSource(BaseModel):
-    id: int
+    # Packages: numeric FLAPI id. Cubes: "cube:<cubeName>".
+    id: int | str
     name: str
     description: str | None = None
+    type: Literal["package", "cube"] = "package"
 
 
 class ParamOption(BaseModel):
